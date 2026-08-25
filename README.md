@@ -59,9 +59,6 @@ A reproducible evaluation pipeline built on the [Polyglot benchmark](https://git
 git clone https://github.com/<your-name>/CodeMate.git
 cd CodeMate
 pip install -e .
-
-# Or with uv
-uv pip install -e .
 ```
 
 ### Configure a model
