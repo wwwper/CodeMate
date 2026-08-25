@@ -1,138 +1,308 @@
-# CodeCoDriver
+<div align="center">
 
-CodeCoDriver is a repository-aware multi-agent engineering runtime. It indexes a local codebase, accepts an engineering task, plans the work, retrieves relevant code, proposes a patch, validates it in a sandbox, reviews the result, records an auditable trace, and reuses long-term memory across tasks.
+# CodeMate
 
+**A lightweight local coding agent built for real codebases**
 
-## Quick Start
+Long-context management · Sub-agent collaboration · Persistent memory · Permission & reliability guardrails
 
-Prerequisites: Go, Node.js/npm, Docker Desktop, and a `DEEPSEEK_API_KEY`.
+**English** · [简体中文](./README.zh-CN.md)
 
-1. Start PostgreSQL and Redis:
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+[![Python](https://img.shields.io/badge/python-3.10%2B-3776AB.svg)](https://www.python.org/)
+[![Polyglot Pass@1](https://img.shields.io/badge/Polyglot%20Pass%401-68.0%25-brightgreen.svg)](#evaluation)
 
-```powershell
-docker compose up -d postgres redis
-```
+<img src="docs/assets/demo.gif" alt="CodeMate TUI demo" width="760">
 
-2. Start the Go API:
+</div>
 
-```powershell
-$env:DEEPSEEK_API_KEY="your-api-key"
-$env:DOUBAO_API_KEY="your-doubao-api-key"
-$env:GOTELEMETRY="off"
-go run ./cmd/api
-```
+---
 
-Set `DOUBAO_API_KEY` to enable real semantic embeddings through Volcano Ark's
-`doubao-embedding-text-240715` model. If it is not set, CodeCoDriver falls back to
-the deterministic local embedding provider so local development still works.
+## Introduction
 
-Set `CODECODRIVER_REDIS_ADDR=localhost:6379` before starting the API to enable Redis leases and multi-worker coordination. Without this variable, the runtime falls back to the single-process in-memory queue.
+CodeMate is a coding agent that runs in your local terminal. It isn't built around "the model can call tools" — models already do that. It's built around **harness engineering**: the things that actually derail an agent on long-horizon tasks. Context blowing up. Subtasks polluting the main thread. Experience that can't be reused across sessions. Tool calls stepping outside their boundary. Loops that nobody stops.
 
-3. Start the Dashboard:
+Put simply: **the model does the thinking, the harness makes sure it finishes, stays stable, and stays safe.**
 
-```powershell
-cd web
-npm install
-npm run dev
-```
+If you're building your own agent, CodeMate also works as a readable reference implementation — every mechanism has a concrete home in the source, rather than being a promise written into a prompt.
 
-Open `http://127.0.0.1:5173`. The API listens on `http://localhost:8080`, and Vite proxies API requests to it.
+### Core capabilities
 
-4. Seed the demo repository and benchmark cases:
-
-```powershell
-./scripts/seed-demo.ps1
-```
-
-This registers the local `demo/go-rest-api` repository and creates benchmark cases so the Dashboard can be used immediately.
-
-## Dashboard Pages
-
-### Overview
-
-The Overview page is the main entry point:
-
-- Register a new repository by entering a repository name and a local filesystem path, then click `Register repo`.
-- Create an engineering task by selecting a repository, an optional Skill (defaults to auto routing), a title, and a description, then clicking `Create task`.
-- Review runtime metrics: active runs, completed tasks, human reviews, average runtime, completion rate, and failed tasks.
-- Click a recent task to jump into its execution trace.
-
-### Task Trace
-
-The Task Trace page shows all tasks and a detailed audit trail for the selected task:
-
-- Click any task in the left list to load its timeline.
-- The timeline shows Planner, Codebase, Patch, Test, Reviewer, ToolCall, and LLM usage events.
-- If a task is `HUMAN_REVIEW_REQUIRED`, enter an optional decision reason and click `Approve` or `Reject`.
-- You can also type free-form feedback and click `Send feedback & continue`. The task re-enters the Agent loop with your feedback plus the previous review and patch, enabling multi-turn chat-like iteration; a `go test ...` command in feedback overrides this run's sandbox test command.
-- `code-explainer` tasks render as a chat thread at the top of Task Trace, with Markdown-formatted assistant replies.
-- Completed `code-explainer` tasks keep a chat input so you can continue asking follow-up questions.
-- For normal patch review, approval completes the task and rejection marks it failed.
-- If the Planner detects from successful memory and the current file tree that the deliverable already exists, the UI shows `Accept skip` / `Continue anyway`. Accepting ends the task; continuing re-queues it for real execution instead of marking it failed.
-- Approving marks the task completed; rejecting marks it failed.
-- Agent runs never mutate the original repository. Every file-related tool operates on a per-task Docker workspace, and the generated patch is kept as a `patch_proposal` artifact for manual review or downstream application.
-
-### Memory
-
-The Memory page inspects repository-scoped long-term memory:
-
-- Enter the repository ID in the `Repository ID` field. The ID is printed by `seed-demo.ps1` and shown in the repository selector.
-- Enter a query such as `retry timeout` or `pagination validation`.
-- Click `Search memory` to see memory hits with kind, score, source, recall count, and creation time.
-
-### Skills
-
-The Skills page shows the current PromptTemplate and Skill registry:
-
-- Task creation supports `Auto route` or an explicit `skill_name`. Auto routing is handled by TaskRouter using task keywords, repository paths, and memory hits.
-- Each Skill contains `keywords`, `path_patterns`, `workflow`, `prompts`, and `allowed_tools`, so prompts can be iterated independently.
-- `code-explainer` is a read-only explanation Skill. Tasks asking how a feature works, architecture, files, functions, or abstractions are routed automatically and produce a Markdown `explanation` artifact without generating patches.
-- Skills live in the `skills/` directory, one `.json` file per Skill. You can add or edit files manually.
-- After manually adding files, click `Reload folder` on the Skills page or call `POST /skills/reload` to rescan immediately.
-- The Skills page accepts a GitHub repository or `.json` file URL and calls `POST /skills/import` to download valid Skills into `skills/`.
-- `POST /skills` also persists a Skill to `skills/`; set `CODECODRIVER_SKILLS_DIR` to change the directory.
-- Each run records a `skill_selection` artifact with the matched Skill, workflow, scores, and routing reason.
+| Capability | What it does |
+| --- | --- |
+| **Layered context management** | L0–L2 compaction driven by message-count and token ceilings: offload large results to disk with a restore path → trim and archive history → model-generated summaries. Balances compaction cost against information loss, with a `prompt_too_long` recovery strategy as the backstop |
+| **Sub-agent collaboration** | A `delegate` mechanism runs subtasks in isolated contexts and returns only the final conclusion. Four roles — researcher / reviewer / tester / coder — each get their own prompt and tool permissions (read-only / writable / executable) for least-privilege isolation |
+| **Background execution** | Sub-agents and long-running commands can be dispatched to background threads; results are injected back on completion. The main loop never blocks, and independent tasks run in parallel |
+| **Persistent memory** | Memory is persisted across three files — user / feedback / project — with write admission checked against a persistent / current_task dual scope. Extraction runs asynchronously after each turn, followed by similarity dedup, conflict merging, and snapshot-based safe writes |
+| **Session persistence** | Full session traces are recorded as JSONL, enabling `resume` after an interruption and `share` for reproducing a run |
+| **Permission system** | Deny / Ask / Allow policies, protected-path enforcement, agent-mode permission filtering, and an interactive authorization flow — keeping model-generated tool calls inside a verifiable, authorized execution boundary |
+| **Reliability guardrails** | read-before-edit invariant, doom-loop detection, per-tool failure budget (writes `attempts_left / max_attempts` back into the error message so the model can self-correct), request budget (converts to an Interrupt at the ceiling and asks whether to continue), and an output clipper |
+| **TUI** | Terminal interface with streaming output, collapsible tool calls, a background-task panel, permission prompts, and live context/cost meters |
 
 ### Evaluation
 
-The Evaluation page runs and compares benchmark cases:
+A reproducible evaluation pipeline built on the [Polyglot benchmark](https://github.com/Aider-AI/polyglot-benchmark) (C++ / Go / Java / JavaScript / Python / Rust). A stratified sample of 30 tasks serves as the dev set for iteration; a separate 100-task held-out set is run only at final release to avoid overfitting the benchmark. JSONL traces are the data source for a failure-mode taxonomy — context loss / malformed edits / infinite loops / tool misuse / budget exhaustion — which drives each harness iteration.
 
-- Select `Agent` or `Baseline` mode.
-- Click `Run suite` to execute all registered benchmark cases as one batch.
-- Review pass rate, total runs, benchmark cases, recent batches, metric history, agent-versus-baseline comparison, and individual run results.
-- Memory A/B modes `with_memory` and `without_memory` can be passed as evaluation modes to compare memory impact.
-- Pass rate is calculated only over completed runs; `HUMAN_REVIEW_REQUIRED` is reported separately and does not lower the pass-rate denominator.
-- Benchmarks cover testing, documentation, security, explanation, and refactoring tasks. Evaluation runs auto-cover human-review steps and record `auto_human` actions.
-- Run `./scripts/run-eval-suite.ps1 -Mode agent` to launch a standardized suite; reports are written to `test-reports/`.
-- `GET /evaluations/report` returns per-task quality scores, token/cost usage, per-Agent calls, repair effort, artifacts, and expected-path hits for prompt optimization.
+| Metric | Result |
+| --- | --- |
+| Average injected context | **↓ 81%** |
+| Hard-failure rate from context exhaustion | **32.0% → 3.0%** |
+| End-to-end task latency with parallel execution | **↓ 35%** |
+| Relative Pass@1 gain from the guardrail system | **+21%** |
+| Polyglot held-out (100 tasks) Pass@1 | **68.0%** |
 
-## Typical Workflow
+> See [`eval/README.md`](./eval/README.md) for reproduction steps.
 
-1. Start PostgreSQL, API, and the Dashboard.
-2. Run `seed-demo.ps1` if you want a reproducible demo repository.
-3. In Overview, register another repository or create a task for the demo repository.
-4. Open Task Trace to inspect each Agent step and failure evidence.
-5. If the runtime requests human review, approve or reject the task from the trace page.
-6. Search Memory for related historical experience before starting a similar task.
-7. Run an Evaluation suite to measure Agent performance against the benchmark.
+---
 
-## How It Works
+## Quick start
 
-- `Planner Agent` creates an execution plan and, on repair attempts, creates a focused repair plan.
-- Before planning, Planner checks similar successful memories against the current file tree. If the target deliverable already exists, it returns `SKIP_SUGGESTED` and waits for human confirmation instead of regenerating a duplicate patch.
-- `SkillRegistry` stores configurable prompt skills, `PromptTemplate` handles variable rendering, and `TaskRouter` routes tasks before the Agent loop starts. Agents prefer selected-skill prompts and fall back to built-in generic rules.
-- `explanation_agent_loop` runs only Planner, Codebase, and Explainer read-only steps, then completes with an `explanation` artifact instead of entering the Patch/Test/Reviewer repair chain.
-- `Codebase Agent` retrieves relevant files and pairs source files with existing test files when the task asks for test coverage.
-- `Patch Agent` edits files only inside the isolated Docker workspace using `read_file`, `search_files`, `read_symbols`, `edit_file`, and `write_file`; it calls `generate_patch` to produce a real `git diff` instead of hand-writing a unified diff.
-- Every file-related tool runs inside one per-task Docker workspace. The host repository is imported into a named volume rather than bind-mounted, and `search_files`/`read_symbols` execute `ripgrep` inside that container. The same workspace is used to run tests, so the original repository is never modified.
-- `Reviewer Agent` checks correctness, regression risk, evidence, and test coverage before approving a proposal.
-- Distributed workers acquire Redis leases for task IDs, renew them during execution, release them afterward, and use fencing tokens so stale workers cannot overwrite current task state.
-- Long-term memory stores execution summaries, success patterns, and failure patterns with structured fields such as symptom, root cause, changed files, symbols, test command, verification evidence, and success score. An asynchronous memory worker batches DeepSeek refinement jobs, deduplicates near-identical entries, and merges contradictory success/failure pairs into conditional resolved patterns. Retrieval prioritizes success/resolved/refined memory and only injects failure patterns when the symptom or root cause is relevant. Each memory can be linked to its source task, run, files, and symbols. Doubao embeddings are persisted in pgvector `halfvec(2560)` with an HNSW index, and recall combines semantic, keyword, freshness, and access-frequency signals. Mid-loop agent failures are also recorded so future tasks can avoid the same stage-level errors.
-- `Tool Gateway` supports workspace-contained file tools, the Python document sidecar, and MCP JSON-RPC stdio servers.
+### Requirements
 
-The runtime uses DeepSeek's OpenAI-compatible API with the `deepseek-v4-flash` model.
+- Python **3.10+**
+- Git
+- An LLM API key (OpenAI / Anthropic / DeepSeek / any OpenAI-compatible endpoint)
+- Language toolchains for whatever you want the test tools to run (`go`, `cargo`, `javac`, `pytest`, …)
 
+### Install
 
-## Current Status
+```bash
+# From source (recommended)
+git clone https://github.com/<your-name>/CodeMate.git
+cd CodeMate
+pip install -e .
 
-CodeCoDriver is a local engineering-runtime prototype. It supports real task execution in a Docker workspace, long-term memory, distributed worker leases, Dashboard operation, and benchmark evaluation, but it is not yet a production multi-user product: there is no authentication, the Docker workspace isolates file tools rather than the whole Agent process, and benchmark results depend on model output quality.
+# Or with uv
+uv pip install -e .
+```
+
+### Configure a model
+
+The fastest path is environment variables:
+
+```bash
+export CODEMATE_API_KEY="sk-..."
+export CODEMATE_BASE_URL="https://api.deepseek.com/v1"   # optional, OpenAI-compatible endpoint
+export CODEMATE_MODEL="deepseek-chat"
+```
+
+Or run the interactive setup, which writes `~/.codemate/config.yaml`:
+
+```bash
+codemate init
+```
+
+### Run
+
+```bash
+cd /path/to/your/repo
+
+# Launch the TUI (recommended)
+codemate
+
+# One-shot task, exits when done
+codemate "Read src/server.py, switch the timeout retry to exponential backoff, and add a unit test"
+
+# Read-only mode: analyze without modifying — good for a first pass on an unfamiliar repo
+codemate --agent-mode readonly "Walk me through how a request flows through this project"
+
+# Resume and share
+codemate --resume last
+codemate sessions list
+codemate share <session-id>
+```
+
+### TUI keys
+
+| Key | Action |
+| --- | --- |
+| `Enter` | Send message |
+| `Esc` | Interrupt the current turn (completed tool results are kept) |
+| `Ctrl+R` | Expand / collapse the full output of the latest tool call |
+| `Ctrl+B` | Open the background-task panel (sub-agents and long-running commands) |
+| `Ctrl+D` | Exit and save the session |
+| `/` | Open the slash-command palette |
+
+Common slash commands:
+
+```
+/model                 switch model
+/compact               trigger one round of context compaction
+/memory                inspect / edit the memory currently injected
+/permissions           view and temporarily adjust permission rules
+/agents                list sub-agent roles and their tool permissions
+/cost                  token and cost breakdown for this session
+/resume                switch to a previous session
+/clear                 clear the context (memory is kept)
+```
+
+---
+
+## Configuration
+
+### Sources and precedence
+
+Later sources override earlier ones:
+
+1. Built-in defaults
+2. Global config: `~/.codemate/config.yaml`
+3. Project config: `<repo>/.codemate/config.yaml` (commit it — permission rules are worth sharing with the team)
+4. Environment variables (`CODEMATE_*`)
+5. CLI flags (`--model`, `--agent-mode`, …)
+
+### Directory layout
+
+```
+~/.codemate/
+├── config.yaml              # global config
+├── memory/
+│   ├── user.md              # cross-project user preferences
+│   ├── feedback.md          # corrections and feedback
+│   └── projects/<hash>.md   # project-level facts and conventions
+├── sessions/
+│   └── <session-id>.jsonl   # session traces for resume / share
+└── offload/                 # L0 offload directory, keeps the restore path
+```
+
+### Full configuration example
+
+```yaml
+# ~/.codemate/config.yaml
+
+model:
+  provider: openai            # openai | anthropic | openai-compatible
+  name: deepseek-chat
+  base_url: https://api.deepseek.com/v1
+  api_key_env: CODEMATE_API_KEY
+  temperature: 0.2
+  max_output_tokens: 8192
+  # Cheaper model for auxiliary work: summarization, memory extraction
+  small_model: deepseek-chat
+
+context:
+  max_tokens: 120000          # token ceiling that triggers compaction
+  max_messages: 120           # message-count ceiling that triggers compaction
+  trigger_ratio: 0.8          # start layered compaction at 80% of the ceiling
+  l0_offload:                 # L0: offload large results, keep summary + restore path
+    enabled: true
+    threshold_tokens: 4000
+    dir: ~/.codemate/offload
+  l1_trim:                    # L1: trim and archive history
+    enabled: true
+    keep_recent_messages: 30
+  l2_summarize:               # L2: model-generated summary
+    enabled: true
+    keep_recent_messages: 12
+  prompt_too_long_recovery: true   # backstop: step-down retry when a request is oversized
+
+subagent:
+  enabled: true
+  max_parallel: 3             # max concurrently running sub-agents
+  background: true            # allow background execution with completion callbacks
+  max_depth: 2                # no unbounded delegation chains
+  roles:
+    researcher:
+      tools: [read, grep, glob, ls]                  # read-only
+      model: deepseek-chat
+    reviewer:
+      tools: [read, grep, glob]                      # read-only
+    tester:
+      tools: [read, grep, bash]                      # executable
+    coder:
+      tools: [read, write, edit, grep, glob, bash]   # writable + executable
+
+memory:
+  enabled: true
+  dir: ~/.codemate/memory
+  scopes: [persistent, current_task]   # dual scope for write admission
+  extract:
+    enabled: true
+    async: true               # extract after each turn without blocking the main loop
+    dedup_similarity: 0.85    # similarity threshold for dedup
+    conflict_strategy: merge  # merge | overwrite | keep_both
+  inject:
+    max_tokens: 2000          # injection budget
+    mode: progressive         # index + relevance selection + read full text on demand
+
+session:
+  persist: true
+  dir: ~/.codemate/sessions
+  format: jsonl
+
+permissions:
+  default: ask                # deny | ask | allow
+  rules:
+    - { tool: read,  path: "**",              action: allow }
+    - { tool: grep,  path: "**",              action: allow }
+    - { tool: edit,  path: "src/**",          action: allow }
+    - { tool: edit,  path: ".env*",           action: deny  }
+    - { tool: write, path: "**",              action: ask   }
+    - { tool: bash,  command: "git status",   action: allow }
+    - { tool: bash,  command: "rm -rf *",     action: deny  }
+  protected_paths:            # never writable by any tool
+    - ~/.ssh/**
+    - ~/.aws/**
+    - .git/**
+    - "**/*.pem"
+  agent_mode: default         # default | readonly | plan | yolo
+
+guardrails:
+  read_before_edit: true      # a file must be read before it can be edited
+  doom_loop:
+    enabled: true
+    window: 5                 # N consecutive near-identical tool calls counts as a loop
+  tool_failure_budget:
+    max_attempts: 3           # consecutive failures allowed per tool
+    report_remaining: true    # write attempts_left / max_attempts back into the error
+  request_budget:
+    max_requests: 60          # model requests allowed per task
+    on_exceed: interrupt      # convert to an Interrupt and ask whether to continue
+  output_clipper:
+    max_chars: 30000          # clip oversized tool output; L0 offload keeps the full text
+
+tui:
+  theme: dark                 # dark | light
+  stream: true
+  show_context_meter: true    # context usage and cost in the header
+  collapse_tool_output: true
+```
+
+### Environment variables
+
+| Variable | Description |
+| --- | --- |
+| `CODEMATE_API_KEY` | LLM API key |
+| `CODEMATE_BASE_URL` | API endpoint, for OpenAI-compatible services |
+| `CODEMATE_MODEL` | Overrides `model.name` |
+| `CODEMATE_CONFIG` | Path to a specific config file |
+| `CODEMATE_AGENT_MODE` | Overrides `permissions.agent_mode` |
+| `CODEMATE_LOG_LEVEL` | `debug` / `info` / `warn` / `error` |
+
+### Agent modes
+
+| Mode | Permission filter | Use case |
+| --- | --- | --- |
+| `readonly` | Read tools only | Exploring an unfamiliar repo, code review |
+| `plan` | Read-only plus plan output, nothing written to disk | Agree on an approach before touching code |
+| `default` | Evaluated against `permissions.rules`; prompts on no match | Day-to-day development |
+| `yolo` | Everything allowed (`protected_paths` still applies) | Sandboxes, containers, eval runs |
+
+> Use `yolo` only in an isolated environment. Even there, `protected_paths` remains in force.
+
+### Project-level configuration
+
+Drop a `.codemate/config.yaml` in your repo root with only the fields you want to override, and commit the team's permission rules alongside the code:
+
+```yaml
+# <repo>/.codemate/config.yaml
+permissions:
+  rules:
+    - { tool: bash, command: "pytest*",       action: allow }
+    - { tool: bash, command: "make migrate*", action: ask   }
+    - { tool: edit, path: "migrations/**",    action: deny  }
+
+context:
+  max_tokens: 160000
+```
+
+You can also add `.codemate/CODEMATE.md` describing the project's conventions (build commands, directory responsibilities, code style). It's loaded as the seed content for project-scoped memory.
