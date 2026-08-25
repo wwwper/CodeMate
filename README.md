@@ -2,7 +2,6 @@
 
 CodeCoDriver is a repository-aware multi-agent engineering runtime. It indexes a local codebase, accepts an engineering task, plans the work, retrieves relevant code, proposes a patch, validates it in a sandbox, reviews the result, records an auditable trace, and reuses long-term memory across tasks.
 
-[中文文档](README.zh-CN.md)
 
 ## Quick Start
 
@@ -133,61 +132,6 @@ The Evaluation page runs and compares benchmark cases:
 
 The runtime uses DeepSeek's OpenAI-compatible API with the `deepseek-v4-flash` model.
 
-## Configuration
-
-Common environment variables:
-
-| Variable | Purpose |
-|---|---|
-| `DEEPSEEK_API_KEY` | DeepSeek API key. |
-| `DEEPSEEK_BASE_URL` | Override the DeepSeek API base URL. |
-| `DEEPSEEK_TIMEOUT_SECONDS` | Override the model request timeout. |
-| `DEEPSEEK_MAX_RETRIES` | Max retries for transient model errors, default `2`. |
-| `DEEPSEEK_RETRY_BASE_DELAY_MS` | Initial retry backoff in milliseconds, default `2000`. |
-| `DEEPSEEK_RETRY_MAX_DELAY_MS` | Maximum retry backoff in milliseconds, default `30000`. |
-| `DOUBAO_API_KEY` | Volcano Ark embedding API key. Alias: `CODECODRIVER_EMBEDDING_API_KEY`. |
-| `CODECODRIVER_EMBEDDING_BASE_URL` | Override the embedding API base URL, default `https://ark.cn-beijing.volces.com/api/v3`. |
-| `CODECODRIVER_EMBEDDING_MODEL` | Override the embedding model, default `doubao-embedding-text-240715`. |
-| `CODECODRIVER_EMBEDDING_TIMEOUT_SECONDS` | Override the embedding request timeout, default `30`. |
-| `CODECODRIVER_SKILLS_FILE` | Optional JSON path loaded at API startup to register custom Skill templates. |
-| `CODECODRIVER_SKILLS_DIR` | Skill directory path, default `skills/`. |
-| `DATABASE_URL` | Override the PostgreSQL connection string. |
-| `CODECODRIVER_ADDR` | Override the API listen address. |
-| `CODECODRIVER_WORKERS` | Local worker concurrency, default `1`. |
-| `CODECODRIVER_MEMORY_WORKERS` | Async memory refinement workers, default `1`. |
-| `CODECODRIVER_REDIS_ADDR` | Redis address used for distributed task leases and fencing tokens. |
-| `CODECODRIVER_RATE_LIMIT` | API requests per minute per client; `0` disables it. |
-| `CODECODRIVER_CONTEXT_COMPACT_TOKENS` | Trigger compacting when an agent prompt exceeds this estimated token count, default `60000`. |
-| `CODECODRIVER_CONTEXT_KEEP_TURNS` | Number of recent tool results or repair turns kept during compaction, default `2`. |
-| `CODECODRIVER_TOOL_RESULT_MAX_BYTES` | Maximum bytes kept for one recent tool result after compaction, default `8192`. |
-| `CODECODRIVER_CONTEXT_VALUE_MAX_BYTES` | Maximum bytes kept for one large string in lean agent context, default `16384`. |
-| `DEEPSEEK_INPUT_COST_PER_MILLION` | Enable estimated input cost tracking. |
-| `DEEPSEEK_OUTPUT_COST_PER_MILLION` | Enable estimated output cost tracking. |
-
-## API Surface
-
-Core API routes:
-
-- `GET /dashboard/overview`
-- `GET /repositories`, `POST /repositories`, `POST /repositories/{id}/index`
-- `GET /tasks`, `POST /tasks`, `GET /tasks/{id}/timeline`, `POST /tasks/{id}/cancel`
-- `POST /tasks/{id}/rerun`
-- `GET /skills`, `POST /skills`, `POST /skills/import`, `POST /skills/reload`
-- `GET /memory/search?repository_id=...&query=...`
-- `GET /evaluations`, `POST /evaluations/cases`, `PUT /evaluations/cases/{id}`
-- `POST /evaluations/runs`, `POST /evaluations/suites`
-- `GET /human-reviews`, `POST /human-reviews/{taskId}/approve`, `POST /human-reviews/{taskId}/reject`, `POST /human-reviews/{taskId}/feedback`
-
-## Documentation
-
-- [Project design](docs/01-project-design.md)
-- [Architecture](docs/02-architecture-design.md)
-- [Data model](docs/03-data-model.md)
-- [Implementation plan](docs/04-implementation-plan.md)
-- [Runtime reliability](docs/05-runtime-reliability.md)
-- [Demo runbook](docs/06-demo-runbook.md)
-- [Resume summary](docs/07-resume-project-summary.md)
-- [Eval token bloat incident report](docs/09-eval-token-bloat-incident.md)
 
 ## Current Status
 
