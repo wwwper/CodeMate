@@ -1,0 +1,86 @@
+[
+  {
+    "name": "documentation",
+    "description": "README, docs, and Chinese documentation tasks",
+    "keywords": ["readme", "reamdme", "中文文档", "文档", "documentation", "document", "markdown", "docs", ".md"],
+    "path_patterns": ["*.md", "**/*.md", "docs/**"],
+    "workflow": "documentation_agent_loop",
+    "allowed_tools": ["read_file", "search_files", "read_symbols", "edit_file", "write_file", "generate_patch"],
+    "prompts": {
+      "planner": {
+        "system": "You are the Planner Agent in CodeCoDriver. Plan repository changes conservatively and return Markdown.",
+        "user": "DOCUMENTATION TASK: This is a documentation-only change. Locate the existing README or markdown file, verify claims against the context, and do not invent endpoints, commands, or license details that are not present."
+      },
+      "patch": {
+        "system": "You are the Patch Agent in CodeCoDriver. Produce precise, minimal, reviewable changes. The workspace must not be mutated.",
+        "user": "DOCUMENTATION TASK: This is a documentation-only change. Locate the existing README or markdown file, verify claims against visible context, and modify it with edit_file when it exists. Use write_file only for a genuinely missing documentation file. Do not change production code. Tests are not required for approval."
+      },
+      "reviewer": {
+        "system": "You are the Reviewer Agent in CodeCoDriver. Be skeptical, evidence-driven, and concise. Do not approve claims unsupported by the supplied context.",
+        "user": "DOCUMENTATION TASK: This is a documentation-only change. If the patch applied successfully and the documentation is consistent with context_pack, approve without requiring test output."
+      }
+    }
+  },
+  {
+    "name": "code-explainer",
+    "description": "Explain repository architecture, implementation paths, files, functions, and abstractions",
+    "keywords": ["explain", "explanation", "how does", "how is", "architecture", "flow", "function", "file", "understand", "read", "解释", "说明", "原理", "架构", "流程", "实现", "函数", "文件", "阅读"],
+    "path_patterns": [],
+    "workflow": "explanation_agent_loop",
+    "allowed_tools": ["read_file", "search_files", "read_symbols"],
+    "prompts": {
+      "planner": {
+        "system": "You are the Code Explanation Planner in CodeCoDriver. Plan read-only retrieval and explanation work.",
+        "user": "EXPLANATION TASK: Plan which files, symbols, call paths, and abstractions to retrieve. Do not propose production code changes."
+      },
+      "codebase": {
+        "system": "You are the Codebase Retrieval Agent in CodeCoDriver.",
+        "user": "EXPLANATION TASK: Prefer files, functions, types, callers, and dependencies relevant to the requested explanation."
+      },
+      "explainer": {
+        "system": "You are the Code Explainer Agent in CodeCoDriver. Be precise, structured, and evidence-based.",
+        "user": "EXPLANATION OUTPUT: Explain the requested behavior, implementation path, architecture, file, function, or abstraction using only visible context. Include call paths, ownership boundaries, data flow, invariants, and tradeoffs where relevant. Use Markdown with headings and short code references. Do not invent APIs."
+      }
+    }
+  },
+  {
+    "name": "go-testing",
+    "description": "Go backend and focused test coverage tasks",
+    "keywords": ["test", "coverage", "spec", "case", "go test", "testing", "测试", "用例", "覆盖"],
+    "path_patterns": ["**/*_test.go", "**/test/**", "**/*_test.go/**"],
+    "workflow": "standard_agent_loop",
+    "allowed_tools": ["read_file", "search_files", "read_symbols", "edit_file", "write_file", "generate_patch"],
+    "prompts": {
+      "planner": {
+        "system": "You are the Planner Agent in CodeCoDriver. Plan repository changes conservatively and return Markdown.",
+        "user": "TEST COVERAGE TASK: Include focused test targets, reuse existing test helpers, and add focused tests that exercise behavior changes."
+      },
+      "patch": {
+        "system": "You are the Patch Agent in CodeCoDriver. Produce precise, minimal, reviewable changes. The workspace must not be mutated.",
+        "user": "TEST HELPER CONTRACT: Only use functions and types that are visible in context_pack. Never invent helpers such as test.DoRequest or test.PerformRequest. When the context includes internal/test helper files, reuse the exact helper signatures shown there. Prefer adding new focused test functions at the end of an existing *_test.go file instead of rewriting existing tests."
+      },
+      "reviewer": {
+        "system": "You are the Reviewer Agent in CodeCoDriver. Be skeptical, evidence-driven, and concise. Do not approve claims unsupported by the supplied context.",
+        "user": "TEST COVERAGE REVIEW: Verify that behavior changes include focused tests and that the proposal reuses visible test helpers instead of invented ones."
+      }
+    }
+  },
+  {
+    "name": "general",
+    "description": "Default engineering task workflow",
+    "keywords": [],
+    "path_patterns": [],
+    "workflow": "standard_agent_loop",
+    "allowed_tools": [],
+    "prompts": {}
+  },
+  {
+    "name": "dynamic-agent",
+    "description": "Let the Workflow Orchestrator choose code change, explanation, or human input",
+    "keywords": [],
+    "path_patterns": [],
+    "workflow": "dynamic_agent_loop",
+    "allowed_tools": ["read_file", "search_files", "read_symbols", "edit_file", "write_file", "generate_patch"],
+    "prompts": {}
+  }
+]

@@ -1,0 +1,227 @@
+package domain
+
+import "time"
+
+type TaskStatus string
+
+const (
+	TaskCreated           TaskStatus = "CREATED"
+	TaskIndexCheck        TaskStatus = "INDEX_CHECK"
+	TaskPlanning          TaskStatus = "PLANNING"
+	TaskRetrievingContext TaskStatus = "RETRIEVING_CONTEXT"
+	TaskGeneratingPatch   TaskStatus = "GENERATING_PATCH"
+	TaskRunningTests      TaskStatus = "RUNNING_TESTS"
+	TaskReviewing         TaskStatus = "REVIEWING"
+	TaskExplaining        TaskStatus = "EXPLAINING"
+	TaskReplanRequired    TaskStatus = "REPLAN_REQUIRED"
+	TaskHumanReview       TaskStatus = "HUMAN_REVIEW_REQUIRED"
+	TaskCancelled         TaskStatus = "CANCELLED"
+	TaskCompleted         TaskStatus = "COMPLETED"
+	TaskFailed            TaskStatus = "FAILED"
+)
+
+const (
+	MemoryModeWith    = "with_memory"
+	MemoryModeWithout = "without_memory"
+)
+
+type Repository struct {
+	ID              string    `json:"id"`
+	Name            string    `json:"name"`
+	Path            string    `json:"path"`
+	TestCommand     string    `json:"test_command,omitempty"`
+	PrimaryLanguage string    `json:"primary_language,omitempty"`
+	FileCount       int       `json:"file_count"`
+	IndexedAt       time.Time `json:"indexed_at,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
+}
+
+type RepositoryFile struct {
+	RepositoryID string `json:"repository_id"`
+	Path         string `json:"path"`
+	Language     string `json:"language,omitempty"`
+	Size         int64  `json:"size"`
+	Hash         string `json:"hash"`
+	Summary      string `json:"summary,omitempty"`
+}
+
+type Symbol struct {
+	RepositoryID string `json:"repository_id"`
+	FilePath     string `json:"file_path"`
+	Name         string `json:"name"`
+	Kind         string `json:"kind"`
+	Line         int    `json:"line"`
+}
+
+type Task struct {
+	ID           string     `json:"id"`
+	RepositoryID string     `json:"repository_id"`
+	Title        string     `json:"title"`
+	Description  string     `json:"description"`
+	SkillName    string     `json:"skill_name,omitempty"`
+	Status       TaskStatus `json:"status"`
+	Error        string     `json:"error,omitempty"`
+	MemoryMode   string     `json:"memory_mode,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+}
+
+type TaskRun struct {
+	ID           string     `json:"id"`
+	TaskID       string     `json:"task_id"`
+	Status       TaskStatus `json:"status"`
+	FencingToken int64      `json:"fencing_token,omitempty"`
+	StartedAt    time.Time  `json:"started_at"`
+	EndedAt      time.Time  `json:"ended_at,omitempty"`
+}
+
+type TaskStep struct {
+	ID        string    `json:"id"`
+	TaskID    string    `json:"task_id"`
+	RunID     string    `json:"run_id"`
+	AgentName string    `json:"agent_name"`
+	StepType  string    `json:"step_type"`
+	Status    string    `json:"status"`
+	Input     any       `json:"input,omitempty"`
+	Output    any       `json:"output,omitempty"`
+	Error     string    `json:"error,omitempty"`
+	StartedAt time.Time `json:"started_at"`
+	EndedAt   time.Time `json:"ended_at,omitempty"`
+	LatencyMS int64     `json:"latency_ms"`
+}
+
+type ToolCall struct {
+	ID              string         `json:"id"`
+	TaskID          string         `json:"task_id"`
+	RunID           string         `json:"run_id"`
+	StepID          string         `json:"step_id"`
+	ToolName        string         `json:"tool_name"`
+	ProviderType    string         `json:"provider_type"`
+	RequestPayload  map[string]any `json:"request_payload,omitempty"`
+	ResponsePayload any            `json:"response_payload,omitempty"`
+	Status          string         `json:"status"`
+	Error           string         `json:"error,omitempty"`
+	StartedAt       time.Time      `json:"started_at"`
+	EndedAt         time.Time      `json:"ended_at,omitempty"`
+	LatencyMS       int64          `json:"latency_ms"`
+}
+
+type LLMUsage struct {
+	ID               string    `json:"id"`
+	TaskID           string    `json:"task_id"`
+	RunID            string    `json:"run_id"`
+	StepID           string    `json:"step_id"`
+	AgentName        string    `json:"agent_name"`
+	Model            string    `json:"model"`
+	PromptTokens     int       `json:"prompt_tokens"`
+	CompletionTokens int       `json:"completion_tokens"`
+	TotalTokens      int       `json:"total_tokens"`
+	EstimatedCostUSD float64   `json:"estimated_cost_usd"`
+	LatencyMS        int64     `json:"latency_ms"`
+	CreatedAt        time.Time `json:"created_at"`
+}
+
+type Artifact struct {
+	ID        string    `json:"id"`
+	TaskID    string    `json:"task_id"`
+	RunID     string    `json:"run_id"`
+	Type      string    `json:"type"`
+	Name      string    `json:"name"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type MemoryEntry struct {
+	ID                   string            `json:"id"`
+	RepositoryID         string            `json:"repository_id"`
+	TaskID               string            `json:"task_id,omitempty"`
+	Kind                 string            `json:"kind"`
+	Content              string            `json:"content"`
+	Title                string            `json:"title,omitempty"`
+	Summary              string            `json:"summary,omitempty"`
+	Symptom              string            `json:"symptom,omitempty"`
+	RootCause            string            `json:"root_cause,omitempty"`
+	ChangedFiles         []string          `json:"changed_files,omitempty"`
+	Symbols              []string          `json:"symbols,omitempty"`
+	TestCommand          string            `json:"test_command,omitempty"`
+	VerificationEvidence string            `json:"verification_evidence,omitempty"`
+	SuccessScore         float64           `json:"success_score,omitempty"`
+	SourceRunID          string            `json:"source_run_id,omitempty"`
+	DuplicateOf          string            `json:"duplicate_of,omitempty"`
+	ConflictGroupID      string            `json:"conflict_group_id,omitempty"`
+	Condition            string            `json:"condition,omitempty"`
+	RefinedAt            *time.Time        `json:"refined_at,omitempty"`
+	Source               string            `json:"source,omitempty"`
+	Score                float64           `json:"score,omitempty"`
+	Metadata             map[string]string `json:"metadata,omitempty"`
+	Embedding            []float64         `json:"embedding,omitempty"`
+	Links                []MemoryLink      `json:"links,omitempty"`
+	LastAccessedAt       time.Time         `json:"last_accessed_at,omitempty"`
+	AccessCount          int               `json:"access_count,omitempty"`
+	CreatedAt            time.Time         `json:"created_at"`
+}
+
+type MemoryLink struct {
+	ID           string    `json:"id"`
+	MemoryID     string    `json:"memory_id"`
+	RepositoryID string    `json:"repository_id"`
+	TargetType   string    `json:"target_type"`
+	TargetID     string    `json:"target_id"`
+	Label        string    `json:"label,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+type BenchmarkCase struct {
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	RepositoryID string    `json:"repository_id"`
+	Title        string    `json:"title"`
+	Description  string    `json:"description"`
+	Expected     []string  `json:"expected,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+type EvaluationRun struct {
+	ID                 string    `json:"id"`
+	CaseID             string    `json:"case_id"`
+	BatchID            string    `json:"batch_id,omitempty"`
+	TaskID             string    `json:"task_id,omitempty"`
+	Mode               string    `json:"mode"`
+	Status             string    `json:"status"`
+	Passed             bool      `json:"passed"`
+	DurationMS         int64     `json:"duration_ms"`
+	Notes              string    `json:"notes,omitempty"`
+	MemoryHits         int       `json:"memory_hits,omitempty"`
+	RepairAttempts     int       `json:"repair_attempts,omitempty"`
+	MemorySuccessHits  int       `json:"memory_success_hits,omitempty"`
+	MemoryFailureHits  int       `json:"memory_failure_hits,omitempty"`
+	MemoryResolvedHits int       `json:"memory_resolved_hits,omitempty"`
+	MemoryRefinedHits  int       `json:"memory_refined_hits,omitempty"`
+	StartedAt          time.Time `json:"started_at"`
+	EndedAt            time.Time `json:"ended_at,omitempty"`
+	CreatedAt          time.Time `json:"created_at"`
+}
+
+type EvaluationBatch struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Mode      string    `json:"mode"`
+	Status    string    `json:"status"`
+	Total     int       `json:"total"`
+	Completed int       `json:"completed"`
+	Passed    int       `json:"passed"`
+	StartedAt time.Time `json:"started_at"`
+	EndedAt   time.Time `json:"ended_at,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type EvaluationMetricSnapshot struct {
+	ID            string    `json:"id"`
+	BatchID       string    `json:"batch_id"`
+	Mode          string    `json:"mode"`
+	Total         int       `json:"total"`
+	Passed        int       `json:"passed"`
+	PassRate      float64   `json:"pass_rate"`
+	AvgDurationMS int64     `json:"avg_duration_ms"`
+	CreatedAt     time.Time `json:"created_at"`
+}
